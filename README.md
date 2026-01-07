@@ -1,149 +1,158 @@
-# minbpe
+# minbpe - BPE 학습 가이드
 
-LLM 토크나이저에서 자주 쓰이는 (byte-level) Byte Pair Encoding (BPE) 알고리즘을 깔끔하고 미니멀하게 구현한 코드입니다. "byte-level"이라고 하는 이유는 UTF-8로 인코딩된 문자열에서 동작하기 때문입니다.
+이 프로젝트는 LLM 토크나이저의 핵심인 **Byte Pair Encoding (BPE)** 알고리즘을 직접 구현하며 배우기 위한 교육용 저장소입니다.
 
-이 알고리즘은 [GPT-2 논문](https://d4mucfpksywv.cloudfront.net/better-language-models/language_models_are_unsupervised_multitask_learners.pdf)과 OpenAI의 [GPT-2 코드](https://github.com/openai/gpt-2)를 통해 LLM 분야에서 유명해졌습니다. NLP에서 BPE를 처음 사용한 논문은 [Sennrich et al. 2015](https://arxiv.org/abs/1508.07909)입니다. 요즘 나오는 LLM들(GPT, Llama, Mistral 등)은 거의 다 이 알고리즘으로 토크나이저를 학습시킵니다.
+## 왜 BPE를 배워야 할까요?
 
-이 저장소에는 두 가지 Tokenizer가 있고, 둘 다 토크나이저의 3가지 핵심 기능을 수행할 수 있습니다: 1) 주어진 텍스트로 어휘와 병합 규칙 학습, 2) 텍스트를 토큰으로 인코딩, 3) 토큰을 텍스트로 디코딩. 파일 구성은 다음과 같습니다:
+토크나이제이션은 LLM의 많은 "이상한" 동작들의 근본 원인입니다:
+- LLM이 간단한 산술 연산을 틀리는 이유
+- 영어가 아닌 언어에서 성능이 떨어지는 이유
+- 문자열 뒤집기 같은 단순 작업을 못하는 이유
 
-1. [minbpe/base.py](minbpe/base.py): `Tokenizer` 클래스를 구현합니다. 베이스 클래스로, `train`, `encode`, `decode` 스텁과 저장/로드 기능, 그리고 몇 가지 유틸리티 함수가 들어있습니다. 직접 사용하는게 아니라 상속받아서 쓰라고 만든 클래스입니다.
-2. [minbpe/basic.py](minbpe/basic.py): `BasicTokenizer`를 구현합니다. 텍스트에서 바로 돌아가는 가장 단순한 BPE 구현체입니다.
-3. [minbpe/regex.py](minbpe/regex.py): `RegexTokenizer`를 구현합니다. 토큰화 전에 정규식 패턴으로 입력 텍스트를 전처리해서 카테고리별로(문자, 숫자, 구두점 등) 나눕니다. 이렇게 하면 카테고리 경계를 넘어서 병합이 일어나지 않습니다. GPT-2 논문에서 도입됐고 GPT-4까지 계속 쓰이고 있습니다. 스페셜 토큰도 이 클래스에서 처리합니다.
-4. [minbpe/gpt4.py](minbpe/gpt4.py): `GPT4Tokenizer`를 구현합니다. `RegexTokenizer`를 감싸는 가벼운 래퍼로, [tiktoken](https://github.com/openai/tiktoken) 라이브러리의 GPT-4 토크나이저를 정확히 재현합니다. 정확한 병합 규칙을 복원하는 것과 1바이트 토큰 순서 관련 처리(아마 역사적인 이유로 생긴 듯?)를 담당합니다.
+BPE를 이해하면 이런 현상들이 왜 발생하는지 명확히 알 수 있습니다.
 
-마지막으로 [train.py](train.py) 스크립트는 [tests/taylorswift.txt](tests/taylorswift.txt) 텍스트(테일러 스위프트 위키백과 문서ㅋㅋ)로 두 가지 주요 토크나이저를 학습시키고 vocab을 디스크에 저장합니다. 제 맥북(M1)에서 약 25초 정도 걸립니다.
+---
 
-위의 모든 파일들은 짧고 주석도 잘 달려있고, 파일 하단에 사용 예시도 있습니다.
+## 학습 로드맵
+
+### Phase 1: 기초 이해 (1-2일)
+
+#### 1.1 이론 학습
+1. **강의 영상 시청**: [Andrej Karpathy의 토크나이저 강의](https://www.youtube.com/watch?v=zduSFxRajkE)
+2. **강의 문서 읽기**: [docs/lecture.md](docs/lecture.md) (한국어) 또는 [docs/lecture_origin.md](docs/lecture_origin.md) (영어)
+
+#### 1.2 핵심 개념 체크리스트
+- [ ] 문자 단위 토크나이제이션 vs 서브워드 토크나이제이션 차이
+- [ ] BPE 알고리즘의 기본 원리 (가장 빈번한 쌍 병합)
+- [ ] 왜 256개의 바이트 토큰으로 시작하는지
+- [ ] vocab_size의 의미와 트레이드오프
+
+### Phase 2: 코드 분석 (2-3일)
+
+#### 2.1 코드 읽기 순서
+```
+1. minbpe/base.py     → 기본 구조 이해
+2. minbpe/basic.py    → 핵심 BPE 구현
+3. minbpe/regex.py    → GPT 스타일 전처리
+4. minbpe/gpt4.py     → 실제 GPT-4 토크나이저 재현
+```
+
+#### 2.2 각 파일에서 집중해야 할 부분
+| 파일 | 핵심 함수 | 이해해야 할 것 |
+|------|----------|---------------|
+| base.py | `save()`, `load()` | 토크나이저 저장 형식 |
+| basic.py | `train()`, `encode()`, `decode()` | BPE의 핵심 로직 |
+| regex.py | 정규식 패턴 | 왜 텍스트를 미리 분리하는지 |
+| gpt4.py | `recover_merges()` | tiktoken과의 호환성 |
+
+### Phase 3: 직접 구현 (3-5일)
+
+[docs/exercise.md](docs/exercise.md)의 단계별 연습을 따라하세요:
+
+| Step | 목표 | 난이도 |
+|------|------|--------|
+| Step 1 | BasicTokenizer 구현 | ★★☆☆☆ |
+| Step 2 | RegexTokenizer로 확장 | ★★★☆☆ |
+| Step 3 | GPT-4 토크나이저 매칭 | ★★★★☆ |
+| Step 4 | 스페셜 토큰 처리 | ★★★★☆ |
+| Step 5 | SentencePiece 스타일 구현 | ★★★★★ |
+
+### Phase 4: 심화 학습
+
+#### 4.1 실험해볼 것들
+- 다양한 vocab_size로 학습하고 결과 비교
+- 한국어 텍스트로 토크나이저 학습해보기
+- 토큰화 결과가 모델 성능에 미치는 영향 분석
+
+#### 4.2 토크나이저 시각화 도구
+- [tiktokenizer](https://tiktokenizer.vercel.app) - 실시간 토크나이제이션 확인
+
+---
+
+## 후속 학습 자료
+
+### 필수 논문
+
+| 논문 | 핵심 내용 | 링크 |
+|------|----------|------|
+| **Sennrich et al. (2015)** | NLP에서 BPE 최초 적용 | [arXiv](https://arxiv.org/abs/1508.07909) |
+| **GPT-2 (2019)** | Byte-level BPE 대중화 | [PDF](https://d4mucfpksywv.cloudfront.net/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) |
+
+### 추천 논문 (읽기 순서대로)
+
+#### 토크나이제이션 기초
+1. **"Neural Machine Translation of Rare Words with Subword Units"** (Sennrich et al., 2015)
+   - BPE를 NLP에 처음 적용한 논문
+   - 희귀 단어 문제를 서브워드로 해결하는 아이디어
+
+2. **"SentencePiece: A simple and language independent subword tokenizer"** (Kudo & Richardson, 2018)
+   - Google의 토크나이저 라이브러리
+   - Llama, Mistral 등이 사용
+   - [arXiv](https://arxiv.org/abs/1808.06226)
+
+#### 토크나이제이션 개선
+3. **"BPE-Dropout"** (Provilkov et al., 2020)
+   - 학습 시 토크나이제이션에 노이즈 추가
+   - 모델의 일반화 성능 향상
+   - [arXiv](https://arxiv.org/abs/1910.13267)
+
+4. **"UnigramLM"** (Kudo, 2018)
+   - BPE의 대안적 접근법
+   - 확률 기반 토크나이제이션
+   - [arXiv](https://arxiv.org/abs/1804.10959)
+
+#### 최신 연구
+5. **"Tokenizer Choice For LLM Training"** (2024 연구들)
+   - vocab size와 모델 성능의 관계
+   - 다국어 토크나이저 설계
+
+### 관련 코드베이스
+- [tiktoken](https://github.com/openai/tiktoken) - OpenAI 공식 토크나이저
+- [sentencepiece](https://github.com/google/sentencepiece) - Google 토크나이저
+- [tokenizers](https://github.com/huggingface/tokenizers) - HuggingFace Rust 구현
+
+---
+
+## 프로젝트 구조
+
+```
+minbpe/
+├── readme.md              # 이 파일 (학습 가이드)
+├── train.py               # 토크나이저 학습 스크립트
+├── minbpe/
+│   ├── base.py            # 베이스 클래스
+│   ├── basic.py           # 기본 BPE 구현
+│   ├── regex.py           # 정규식 기반 토크나이저
+│   └── gpt4.py            # GPT-4 토크나이저 래퍼
+├── docs/
+│   ├── readme.md          # 프로젝트 상세 문서 (한국어)
+│   ├── readme_origin.md   # 프로젝트 상세 문서 (영어)
+│   ├── lecture.md         # 강의 노트 (한국어)
+│   ├── lecture_origin.md  # 강의 노트 (영어)
+│   └── exercise.md        # 단계별 연습문제
+└── tests/
+    └── taylorswift.txt    # 학습용 샘플 텍스트
+```
+
+---
 
 ## 빠른 시작
 
-가장 간단한 예시로, [위키백과 BPE 문서](https://en.wikipedia.org/wiki/Byte_pair_encoding)를 따라해볼 수 있습니다:
-
 ```python
 from minbpe import BasicTokenizer
+
+# 토크나이저 생성 및 학습
 tokenizer = BasicTokenizer()
-text = "aaabdaaabac"
-tokenizer.train(text, 256 + 3) # 256개는 바이트 토큰이고, 그 다음 3번 병합
-print(tokenizer.encode(text))
-# [258, 100, 258, 97, 99]
-print(tokenizer.decode([258, 100, 258, 97, 99]))
-# aaabdaaabac
-tokenizer.save("toy")
-# 두 파일 생성: toy.model (로드용)과 toy.vocab (확인용)
+tokenizer.train("your training text here", vocab_size=512)
+
+# 인코딩/디코딩
+tokens = tokenizer.encode("hello world")
+text = tokenizer.decode(tokens)
 ```
 
-위키백과에 따르면, "aaabdaaabac"에 BPE를 3번 병합하면 "XdXac"가 됩니다 (X=ZY, Y=ab, Z=aa). 참고로 minbpe는 항상 256개의 개별 바이트를 토큰으로 먼저 할당하고, 거기서부터 필요한 만큼 병합합니다. 그래서 a=97, b=98, c=99, d=100 ([ASCII](https://www.asciitable.com) 값)입니다. (a,a)가 Z로 병합되면 Z는 256이 되고, Y는 257, X는 258이 됩니다. 256개 바이트에서 시작해서 3번 병합하면 위의 결과 [258, 100, 258, 97, 99]가 나옵니다.
+자세한 사용법은 [docs/readme.md](docs/readme.md)를 참고하세요.
 
-## 추론: GPT-4 비교
-
-`RegexTokenizer`가 [tiktoken](https://github.com/openai/tiktoken)의 GPT-4 토크나이저와 동일하게 동작하는지 확인할 수 있습니다:
-
-```python
-text = "hello123!!!? (안녕하세요!) 😉"
-
-# tiktoken
-import tiktoken
-enc = tiktoken.get_encoding("cl100k_base")
-print(enc.encode(text))
-# [15339, 4513, 12340, 30, 320, 31495, 230, 75265, 243, 92245, 16715, 57037]
-
-# 우리 코드
-from minbpe import GPT4Tokenizer
-tokenizer = GPT4Tokenizer()
-print(tokenizer.encode(text))
-# [15339, 4513, 12340, 30, 320, 31495, 230, 75265, 243, 92245, 16715, 57037]
-```
-
-(실행하려면 `pip install tiktoken` 필요합니다). 내부적으로 `GPT4Tokenizer`는 `RegexTokenizer`를 감싸서 GPT-4의 병합 규칙과 스페셜 토큰을 전달하는 것뿐입니다. 스페셜 토큰도 잘 처리되는지 확인할 수 있습니다:
-
-```python
-text = "<|endoftext|>hello world"
-
-# tiktoken
-import tiktoken
-enc = tiktoken.get_encoding("cl100k_base")
-print(enc.encode(text, allowed_special="all"))
-# [100257, 15339, 1917]
-
-# 우리 코드
-from minbpe import GPT4Tokenizer
-tokenizer = GPT4Tokenizer()
-print(tokenizer.encode(text, allowed_special="all"))
-# [100257, 15339, 1917]
-```
-
-tiktoken처럼 encode 호출 시 스페셜 토큰 사용 의도를 명시적으로 선언해야 합니다. 안 그러면 공격자가 제어하는 데이터(예: 유저 프롬프트)에 스페셜 토큰이 들어가는 보안 문제가 생길 수 있습니다. `allowed_special` 파라미터는 "all", "none", 또는 허용할 스페셜 토큰 리스트로 설정할 수 있습니다.
-
-## 학습
-
-tiktoken과 달리 이 코드로 직접 토크나이저를 학습시킬 수 있습니다. 이론적으로 `RegexTokenizer`를 큰 데이터셋에서 vocab 크기 100K로 학습시키면 GPT-4 토크나이저를 재현할 수 있을 겁니다.
-
-두 가지 방법이 있습니다. 첫째로, 정규식 패턴으로 텍스트를 분리하고 전처리하는 복잡함이 싫고, 스페셜 토큰도 필요 없다면 `BasicTokenizer`를 쓰면 됩니다:
-
-```python
-from minbpe import BasicTokenizer
-tokenizer = BasicTokenizer()
-tokenizer.train(very_long_training_string, vocab_size=4096)
-tokenizer.encode("hello world") # 문자열 -> 토큰
-tokenizer.decode([1000, 2000, 3000]) # 토큰 -> 문자열
-tokenizer.save("mymodel") # mymodel.model과 mymodel.vocab 생성
-tokenizer.load("mymodel.model") # 모델 로드, vocab은 시각화용
-```
-
-OpenAI 방식을 따라하고 싶다면 정규식 패턴으로 텍스트를 카테고리별로 나누는 방법을 쓰면 됩니다. GPT-4 패턴이 `RegexTokenizer`의 기본값이니까 이렇게 하면 됩니다:
-
-```python
-from minbpe import RegexTokenizer
-tokenizer = RegexTokenizer()
-tokenizer.train(very_long_training_string, vocab_size=32768)
-tokenizer.encode("hello world") # 문자열 -> 토큰
-tokenizer.decode([1000, 2000, 3000]) # 토큰 -> 문자열
-tokenizer.save("tok32k") # tok32k.model과 tok32k.vocab 생성
-tokenizer.load("tok32k.model") # 디스크에서 모델 로드
-```
-
-당연히 데이터셋 크기에 따라 vocab 크기를 조절하면 됩니다.
-
-**스페셜 토큰**. 스페셜 토큰을 추가하고 싶으면 `register_special_tokens` 함수를 쓰면 됩니다. 예를 들어 vocab_size 32768로 학습했다면, 처음 256개는 바이트 토큰이고, 다음 32768-256개는 병합 토큰이고, 그 다음에 스페셜 토큰을 추가할 수 있습니다. 마지막 "진짜" 병합 토큰 id가 32767 (vocab_size - 1)이니까 첫 번째 스페셜 토큰은 그 바로 다음인 32768이어야 합니다:
-
-```python
-from minbpe import RegexTokenizer
-tokenizer = RegexTokenizer()
-tokenizer.train(very_long_training_string, vocab_size=32768)
-tokenizer.register_special_tokens({"<|endoftext|>": 32768})
-tokenizer.encode("<|endoftext|>hello world", allowed_special="all")
-```
-
-그 뒤에 토큰을 더 추가해도 됩니다. 마지막으로, 코드를 깔끔하고 읽기 쉽고 수정하기 쉽게 만들려고 노력했습니다. 코드 읽고 이해하는 거 겁먹지 마세요. 테스트 코드에도 사용 예시가 많으니까 참고하시면 좋습니다.
-
-## 테스트
-
-테스트는 pytest를 사용합니다. 테스트 파일들은 전부 `tests/` 디렉토리에 있습니다. `pip install pytest` 먼저 하고:
-
-```bash
-$ pytest -v .
-```
-
-이렇게 실행하면 됩니다. (-v는 verbose 옵션, 좀 더 보기 좋게 출력됨)
-
-## 커뮤니티 확장
-
-* [gnp/minbpe-rs](https://github.com/gnp/minbpe-rs): `minbpe`의 Rust 구현체. Python 버전과 거의 1:1로 대응됩니다.
-
-## 연습문제
-
-BPE를 공부하고 싶은 분들을 위해, 직접 minbpe를 단계별로 만들어볼 수 있는 연습문제가 있습니다. [exercise.md](exercise.md) 참고하세요.
-
-## 강의
-
-이 저장소의 코드를 [유튜브 영상](https://www.youtube.com/watch?v=zduSFxRajkE)에서 만들었습니다. 텍스트 버전은 [lecture.md](lecture.md)에서 볼 수 있습니다.
-
-## 할 일
-
-- 큰 파일과 큰 vocab에서도 돌아가는 최적화된 Python 버전 만들기
-- 더 최적화된 C나 Rust 버전 만들기
-- GPT4Tokenizer를 GPTTokenizer로 바꾸고 GPT-2/GPT-3/GPT-3.5도 지원?
-- GPT4Tokenizer처럼 LlamaTokenizer 만들기 (sentencepiece 동등하게)
+---
 
 ## 라이선스
 
